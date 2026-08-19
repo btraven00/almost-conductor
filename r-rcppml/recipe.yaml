@@ -1,0 +1,69 @@
+context:
+  # RcppML 1.0.0 is not on CRAN -- CRAN stops at 0.3.7.1 (2026-03-09), which
+  # predates svd(), pca() and the lanczos/krylov backends entirely. So the
+  # source is the upstream commit that carries the 1.0.0 DESCRIPTION.
+  version: "1.0.0"
+  commit: df69dddbe37962cd0179b6b6c6ace94e400b4f60
+
+package:
+  name: r-rcppml
+  version: ${{ version }}
+
+source:
+  url: https://github.com/zdebruine/RcppML/archive/${{ commit }}.tar.gz
+  sha256: 332ae91b95142180c3c29fa967755d41c568db1418ddbd621d6bee6364846393
+
+build:
+  number: 0
+  script: |
+    # Upstream commits configure and cleanup with mode 644, so R CMD INSTALL
+    # bails with "'configure' exists but is not executable". remotes::install_github
+    # papers over this; a plain R CMD INSTALL does not.
+    chmod +x configure cleanup
+    # configure sniffs $CUDA_HOME, then nvcc on PATH, and bakes the result into
+    # inst/build_config. Neither is present in the build sandbox, so this is a
+    # CPU-only build -- pinning CUDA_HOME empty keeps it that way. A build host
+    # with nvcc on PATH would still be detected; patch configure if that ever
+    # happens.
+    export CUDA_HOME=""
+    R CMD INSTALL --build .
+
+requirements:
+  build:
+  - ${{ compiler('c') }}
+  - ${{ compiler('cxx') }}
+  - make
+  host:
+  - r-base >=4.1.0
+  - r-matrix
+  - r-rcpp
+  - r-rcppeigen
+  run:
+  - r-base
+  - r-matrix
+  - r-rcpp
+  # CUDA is an optional SystemRequirement upstream; this build is CPU-only.
+
+tests:
+- script:
+  - Rscript -e 'library("RcppML")'
+  # The reason this package exists at the 1.0.0 commit rather than CRAN's
+  # 0.3.7.1: svd()/pca() and their Lanczos and Krylov backends. Assert them, or
+  # a silent fallback to an older source would ship as if it were fine.
+  - Rscript -e 'stopifnot(utils::packageVersion("RcppML") >= "1.0.0")'
+  - Rscript -e 'set.seed(1); A <- matrix(abs(rnorm(2000)), 50); for (m in c("lanczos", "krylov")) { s <- RcppML::svd(A, k = 5, center = TRUE, method = m, seed = 42); stopifnot(dim(s@u) == c(50, 5), dim(s@v) == c(40, 5), length(s@d) == 5) }'
+  - Rscript -e 'set.seed(1); A <- matrix(abs(rnorm(2000)), 50); n <- RcppML::nmf(A, k = 5, seed = 42); stopifnot(dim(n@w) == c(50, 5), dim(n@h) == c(5, 40), min(n@w) >= 0, min(n@h) >= 0)'
+
+about:
+  homepage: https://github.com/zdebruine/RcppML
+  summary: Fast Non-Negative Matrix Factorization and Divisive Clustering
+  description: |-
+    High-performance non-negative matrix factorization (NMF), singular value
+    decomposition (SVD) and divisive clustering for large sparse and dense
+    matrices. Implements alternating least squares with coordinate descent and
+    Cholesky NNLS solvers, diagonal scaling for interpretable factors,
+    cross-validation for automatic rank selection, multiple distribution-based
+    losses via iteratively reweighted least squares, regularization (L1, L2,
+    L21, angular, graph Laplacian) and optional GPU acceleration via CUDA.
+  license: GPL-3.0-or-later
+  repository: https://github.com/zdebruine/RcppML
