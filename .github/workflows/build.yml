@@ -45,10 +45,15 @@ jobs:
         TARGET_PLATFORM: ${{ matrix.target }}
 
       run: |
-        pixi run rattler-build build --recipe-dir yamet \
-          --skip-existing=all --target-platform=$TARGET_PLATFORM \
-          --verbose \
-          -c conda-forge -c bioconda -c https://prefix.dev/almost-conductor
+        # One entry per recipe dir CI is expected to build. --skip-existing=all
+        # means an already-published version is a no-op, so listing a dir is
+        # cheap once its package is out.
+        for recipe in yamet r-rcppml; do
+          pixi run rattler-build build --recipe-dir "$recipe" \
+            --skip-existing=all --target-platform=$TARGET_PLATFORM \
+            --verbose \
+            -c conda-forge -c bioconda -c https://prefix.dev/almost-conductor
+        done
 
     - name: Upload all packages
       shell: bash
